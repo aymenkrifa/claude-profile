@@ -72,14 +72,20 @@ func cmdAdd(l paths.Layout, args []string) error {
 		fmt.Printf("created Claude Desktop instance 'Claude (%s)'\n", p.Title())
 	}
 
+	fmt.Println()
 	if a := p.Account(); a.SignedIn {
-		fmt.Printf("\nalready signed in as %s -- run it with: claude-%s\n", a.Email, name)
+		fmt.Printf("already signed in as %s\n", a.Email)
 	} else {
-		fmt.Printf(`
-Next: sign the account in -- its credentials stay inside %s
-  exec zsh              # pick up the new commands
-  claude-%s%s   # available in any '%s' terminal, then run /login
-`, p.Dir, name, padding(name), p.Class)
+		fmt.Printf("Next: sign the account in -- its credentials stay inside %s\n", p.Dir)
+	}
+	// Only point at claude-<name> when that function will actually be there.
+	if shellReady() {
+		fmt.Printf("  exec %-16s # pick up the new commands\n", currentShell())
+		fmt.Printf("  claude-%s%s   # available in any '%s' terminal, then run /login\n",
+			name, padding(name), p.Class)
+	} else {
+		fmt.Printf("  claude-profile run %s      # then run /login\n", name)
+		fmt.Printf("  # for a 'claude-%s' command in every shell: claude-profile shell-init\n", name)
 	}
 	if *login {
 		return execCLI(p.Dir, nil)

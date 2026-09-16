@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,7 +65,11 @@ func cmdSet(l paths.Layout, args []string) error {
 	}
 	fmt.Printf("%s: class=%s label=%s\n", p.Name, p.Class, p.Label)
 	if classChanged {
-		fmt.Printf("run 'exec zsh': the class decides which terminals expose claude-%s\n", p.Name)
+		if shellReady() {
+			fmt.Printf("run 'exec %s': the class decides which terminals expose claude-%s\n", currentShell(), p.Name)
+		} else {
+			fmt.Printf("note: class only takes effect through the shell integration -- claude-profile shell-init\n")
+		}
 	}
 	return nil
 }
@@ -80,31 +86,26 @@ func cmdRm(l paths.Layout, args []string) error {
 	if err != nil {
 		return err
 	}
+	targets := []string{p.Dir, l.DesktopData(p.Name), l.VSCodeData(p.Name)}
+
+	// Ask before touching anything. Unregistering first and confirming second
+	// meant a mistyped answer left the account already unregistered and its
+	// Desktop entry already gone -- an abort that had changed things.
+	if *purge && !*yes {
+		if err := confirmPurge(os.Stdin, p.Name, targets); err != nil {
+			return err
+		}
+	}
+
 	if err := desktop.Remove(l, p.Name); err != nil {
 		return err
 	}
 	if err := os.Remove(filepath.Join(p.Dir, profile.MarkerFile)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	fmt.Printf("unregistered '%s' (data left in %s)\n", p.Name, p.Dir)
-
 	if !*purge {
+		fmt.Printf("unregistered '%s' (data left in %s)\n", p.Name, p.Dir)
 		return nil
-	}
-	targets := []string{p.Dir, l.DesktopData(p.Name), l.VSCodeData(p.Name)}
-	if !*yes {
-		fmt.Println("\nabout to permanently delete:")
-		for _, t := range targets {
-			if fsx.Exists(t) {
-				fmt.Println("  " + t)
-			}
-		}
-		fmt.Printf("type the profile name to confirm: ")
-		var answer string
-		fmt.Scanln(&answer)
-		if strings.TrimSpace(answer) != p.Name {
-			return fmt.Errorf("aborted")
-		}
 	}
 	for _, t := range targets {
 		if err := os.RemoveAll(t); err != nil {
@@ -112,6 +113,27 @@ func cmdRm(l paths.Layout, args []string) error {
 		}
 	}
 	fmt.Printf("deleted %s and its Desktop / VS Code data\n", p.Dir)
+	return nil
+}
+
+// confirmPurge makes the caller type the profile name back. Anything else,
+// including a closed or non-interactive stdin, is an abort: a delete that
+// cannot be confirmed must not proceed by default.
+func confirmPurge(in io.Reader, name string, targets []string) error {
+	fmt.Println("about to permanently delete:")
+	for _, t := range targets {
+		if fsx.Exists(t) {
+			fmt.Println("  " + t)
+		}
+	}
+	fmt.Printf("type the profile name to confirm: ")
+	answer, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && answer == "" {
+		return fmt.Errorf("aborted -- nothing was changed")
+	}
+	if strings.TrimSpace(answer) != name {
+		return fmt.Errorf("aborted -- nothing was changed")
+	}
 	return nil
 }
 
@@ -154,17 +176,43 @@ func cmdDesktop(l paths.Layout, args []string) error {
 	if err != nil {
 		return err
 	}
-	bin, err := exec.LookPath("claude-desktop")
+	bin, err := claudeDesktopBin(l)
 	if err != nil {
-		return fmt.Errorf("claude-desktop not found on PATH")
+		return err
 	}
-	argv := append([]string{
-		bin,
-		"--user-data-dir=" + l.DesktopData(name),
-		"--class=claude-desktop-" + name,
-	}, args[1:]...)
+	argv := []string{bin, "--user-data-dir=" + l.DesktopData(name)}
+	if !l.Darwin() {
+		// An X11 window class, which is what a .desktop entry's
+		// StartupWMClass matches against; it means nothing on macOS.
+		argv = append(argv, "--class=claude-desktop-"+name)
+	}
+	argv = append(argv, args[1:]...)
 	env := append(os.Environ(), "CLAUDE_CONFIG_DIR="+p.Dir)
 	return syscall.Exec(bin, argv, env)
+}
+
+// claudeDesktopBin locates the Claude Desktop executable. On Linux it is a
+// command on PATH; macOS ships it inside an .app bundle, where the Electron
+// binary has to be exec'd directly -- going through 'open' would hand the
+// flags to a process that has already read its user-data-dir.
+func claudeDesktopBin(l paths.Layout) (string, error) {
+	if !l.Darwin() {
+		bin, err := exec.LookPath("claude-desktop")
+		if err != nil {
+			return "", fmt.Errorf("claude-desktop not found on PATH")
+		}
+		return bin, nil
+	}
+	candidates := []string{
+		"/Applications/Claude.app/Contents/MacOS/Claude",
+		filepath.Join(l.Home, "Applications", "Claude.app", "Contents", "MacOS", "Claude"),
+	}
+	for _, c := range candidates {
+		if fsx.Exists(c) {
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("Claude Desktop not found in /Applications or ~/Applications")
 }
 
 // execCLI replaces this process with the Claude CLI bound to one profile.

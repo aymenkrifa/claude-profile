@@ -104,7 +104,7 @@ func cmdRename(l paths.Layout, args []string) error {
 	}
 
 	fmt.Printf("\nrenamed %s -> %s\n", oldName, newName)
-	fmt.Printf("  exec zsh              # claude-%s and vs%s replace the old commands\n", newName, newName)
+	fmt.Printf("  exec %-16s # claude-%s and vs%s replace the old commands\n", currentShell(), newName, newName)
 	if os.Getenv("CLAUDE_CONFIG_DIR") == p.Dir {
 		fmt.Printf("  note: this shell still points CLAUDE_CONFIG_DIR at the old path\n")
 	}
@@ -157,7 +157,14 @@ func short(l paths.Layout, p string) string {
 // retargetSystemdEnv keeps the single-instance Claude Desktop launcher (which
 // reads CLAUDE_CONFIG_DIR from the systemd user environment) pointing at this
 // profile if that is where it was already pointed.
+//
+// systemd is a Linux notion, and the file being absent is the normal case even
+// there. The explicit check is so that skipping it on macOS reads as a
+// decision rather than as an accident of the path not existing.
 func retargetSystemdEnv(l paths.Layout, oldDir, newDir string) error {
+	if l.Darwin() {
+		return nil
+	}
 	conf := filepath.Join(l.Home, ".config", "environment.d", "claude.conf")
 	data, err := os.ReadFile(conf)
 	if err != nil {

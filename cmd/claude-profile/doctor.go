@@ -16,11 +16,19 @@ import (
 )
 
 // stalePathRE matches an absolute reference to a profile-owned directory, so a
-// reference left behind by a partial rename can be told from a live one. It is
-// anchored on the real home directory: without that it also matches relative
-// fragments like ../../.claude-work quoted inside a transcript.
-func stalePathRE(home string) *regexp.Regexp {
-	return regexp.MustCompile(regexp.QuoteMeta(home) + `/(?:\.claude-|\.vscode-|\.config/Claude-)[a-zA-Z0-9][a-zA-Z0-9-]*`)
+// reference left behind by a partial rename can be told from a live one.
+//
+// The prefixes come from the layout rather than being spelled out here, both
+// because they differ by platform and because a prefix the layout knows about
+// but this regexp does not would make doctor quietly miss it. They are
+// absolute, which is the anchoring that stops a relative fragment like
+// ../../.claude-work quoted inside a transcript from matching.
+func stalePathRE(l paths.Layout) *regexp.Regexp {
+	alts := make([]string, 0, len(l.OwnedPrefixes()))
+	for _, p := range l.OwnedPrefixes() {
+		alts = append(alts, regexp.QuoteMeta(p))
+	}
+	return regexp.MustCompile(`(?:` + strings.Join(alts, "|") + `)[a-zA-Z0-9][a-zA-Z0-9-]*`)
 }
 
 // doctorFiles are the live-config files worth checking on every run; --deep
@@ -51,7 +59,7 @@ func cmdDoctor(l paths.Layout, args []string) error {
 		}
 	}
 
-	re := stalePathRE(l.Home)
+	re := stalePathRE(l)
 	problems := 0
 	for _, p := range profiles {
 		// Live config is actionable: something the CLI reads points at nothing.

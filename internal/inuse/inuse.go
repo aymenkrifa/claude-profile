@@ -1,20 +1,23 @@
 // Package inuse reports whether a profile is currently open somewhere.
 //
-// Moving or rewriting a profile out from under a running session loses whatever
-// that session appends between the read and the write, so the commands that do
-// either check here first.
+// Moving or rewriting a profile out from under a running session loses
+// whatever that session appends between the read and the write, so the
+// commands that do either check here first.
 //
 // The evidence matters. A process that merely inherited CLAUDE_CONFIG_DIR --
 // every tool launched from a Claude session does -- is not a writer, and
 // blocking on those would make the check something to routinely override. A
 // process holding an open file under the profile, or sitting in it, is.
+//
+// How that evidence is gathered is per-platform (/proc on Linux, lsof on
+// macOS), so Find reports an error when it cannot look rather than an empty
+// result: "nothing holds this profile" and "I could not tell" must not arrive
+// at a caller looking the same, because one is safe to proceed on and the
+// other is not.
 package inuse
 
 import (
-	"bytes"
 	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -28,29 +31,20 @@ type User struct {
 
 // Find returns processes tied to any of the given directories. Only this
 // user's processes are visible, which is exactly the set that matters.
-func Find(dirs ...string) []User {
+//
+// An error means the platform could not be inspected at all. Callers must
+// treat that as unknown, never as clear.
+func Find(dirs ...string) ([]User, error) {
 	var roots []string
 	for _, d := range dirs {
 		if d != "" {
 			roots = append(roots, d)
 		}
 	}
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return nil
+	if len(roots) == 0 {
+		return nil, nil
 	}
-	self := os.Getpid()
-	var out []User
-	for _, e := range entries {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil || pid == self {
-			continue
-		}
-		if u, ok := inspect(e.Name(), pid, roots); ok {
-			out = append(out, u)
-		}
-	}
-	return out
+	return find(roots)
 }
 
 // Writers reports how many of these processes actually hold the profile open.
@@ -62,42 +56,6 @@ func Writers(users []User) int {
 		}
 	}
 	return n
-}
-
-func inspect(dir string, pid int, roots []string) (User, bool) {
-	proc := filepath.Join("/proc", dir)
-
-	// Strongest evidence first: an open file, or the working directory.
-	if cwd, err := os.Readlink(filepath.Join(proc, "cwd")); err == nil && under(cwd, roots) {
-		return User{PID: pid, Name: comm(proc), How: "cwd", Writer: true}, true
-	}
-	if fds, err := os.ReadDir(filepath.Join(proc, "fd")); err == nil {
-		for _, fd := range fds {
-			target, err := os.Readlink(filepath.Join(proc, "fd", fd.Name()))
-			if err != nil || !under(target, roots) {
-				continue
-			}
-			return User{PID: pid, Name: comm(proc), How: "open file " + filepath.Base(target), Writer: true}, true
-		}
-	}
-
-	// Weaker: the process names the profile but may only have inherited it.
-	if env, err := os.ReadFile(filepath.Join(proc, "environ")); err == nil {
-		for _, kv := range bytes.Split(env, []byte{0}) {
-			key, val, ok := bytes.Cut(kv, []byte{'='})
-			if ok && string(key) == "CLAUDE_CONFIG_DIR" && contains(roots, string(val)) {
-				return User{PID: pid, Name: comm(proc), How: "CLAUDE_CONFIG_DIR"}, true
-			}
-		}
-	}
-	if cmd, err := os.ReadFile(filepath.Join(proc, "cmdline")); err == nil {
-		for _, root := range roots {
-			if bytes.Contains(cmd, []byte("--user-data-dir="+root)) {
-				return User{PID: pid, Name: comm(proc), How: "--user-data-dir"}, true
-			}
-		}
-	}
-	return User{}, false
 }
 
 func under(path string, roots []string) bool {
@@ -116,12 +74,4 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
-}
-
-func comm(proc string) string {
-	b, err := os.ReadFile(filepath.Join(proc, "comm"))
-	if err != nil {
-		return "?"
-	}
-	return strings.TrimSpace(string(b))
 }

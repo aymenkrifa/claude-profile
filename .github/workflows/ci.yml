@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Both platforms, because the parts that differ between them are exactly
+    # the parts most easily got wrong: the in-use check reads /proc on Linux
+    # and shells out to lsof on macOS, and only the runner can prove the
+    # second one works.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: zsh integration parses
+        run: zsh -n shell/claude-profile.zsh
+      - name: cross-compile the release targets
+        run: |
+          for p in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS=${p%/*} GOARCH=${p#*/} go build ./... || exit 1
+          done
