@@ -213,8 +213,13 @@ func (b Builder) count(path string, reps []Replacement) (hits int, binary bool) 
 	if err != nil {
 		return 0, false
 	}
+	// Counted with the same boundary rule Apply uses: a file whose only
+	// mentions are longer names that merely start the same way needs no edit,
+	// and the plan should not claim otherwise.
 	for _, r := range reps {
-		hits += bytes.Count(data, []byte(r.Old))
+		if _, n := replaceAtBoundary(data, []byte(r.Old), []byte(r.New)); n > 0 {
+			hits += n
+		}
 	}
 	head := data
 	if len(head) > 8192 {
@@ -323,6 +328,79 @@ func contains(list []string, s string) bool {
 	return false
 }
 
+// nameByte reports whether c could be part of the directory name that a
+// profile path ends in.
+func nameByte(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	case c == '-', c == '_', c == '.':
+		return true
+	}
+	return false
+}
+
+// replaceAtBoundary substitutes old for new wherever old appears as a whole
+// path, and returns the number of substitutions.
+//
+// A plain ReplaceAll is wrong here, and destructively so. Renaming "a" to "ab"
+// makes OldDir a prefix of the directory of every profile whose name begins
+// with "a": a reference to ~/.claude-abc inside the renamed profile's own
+// .claude.json -- an MCP server command, a recorded project cwd -- would come
+// out as ~/.claude-abbc. So a match only counts when the character after it
+// cannot be continuing a longer name.
+//
+// The character before is checked too. The paths here are absolute and start
+// at the home directory, so anything glued to the front of one is a different
+// path that merely ends the same way, and rewriting inside it would be just as
+// wrong.
+func replaceAtBoundary(data, old, new []byte) ([]byte, int) {
+	if len(old) == 0 {
+		return data, 0
+	}
+	var out []byte
+	hits, from := 0, 0
+	for {
+		i := bytes.Index(data[from:], old)
+		if i < 0 {
+			break
+		}
+		at := from + i
+		end := at + len(old)
+		if out == nil {
+			out = make([]byte, 0, len(data))
+		}
+		// Everything between the last match and this one is carried over
+		// whether or not this match is replaced -- skipping that copy is how a
+		// rejected match earlier in the file swallows the text before it.
+		out = append(out, data[from:at]...)
+		boundedLeft := at == 0 || !nameByte(data[at-1])
+		boundedRight := end == len(data) || !nameByte(data[end])
+		if boundedLeft && boundedRight {
+			out = append(out, new...)
+			hits++
+		} else {
+			out = append(out, old...) // a longer name: keep it verbatim
+		}
+		from = end
+	}
+	if hits == 0 {
+		return data, 0
+	}
+	return append(out, data[from:]...), hits
+}
+
+// applyAll runs every replacement over one file's contents.
+func applyAll(data []byte, reps []Replacement) ([]byte, int) {
+	total := 0
+	for _, r := range reps {
+		var n int
+		data, n = replaceAtBoundary(data, []byte(r.Old), []byte(r.New))
+		total += n
+	}
+	return data, total
+}
+
 // Apply performs the moves, then rewrites the planned files at their new
 // locations. Moves happen first so that a rewrite never targets a path that is
 // about to move out from under it.
@@ -338,11 +416,8 @@ func (p *Plan) Apply() error {
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
-		out := data
-		for _, r := range p.Replacements {
-			out = bytes.ReplaceAll(out, []byte(r.Old), []byte(r.New))
-		}
-		if bytes.Equal(out, data) {
+		out, n := applyAll(data, p.Replacements)
+		if n == 0 {
 			continue
 		}
 		if err := fsx.WriteAtomic(path, out); err != nil {

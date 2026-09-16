@@ -280,3 +280,102 @@ func TestEmptyHistoryDirNotReported(t *testing.T) {
 		t.Error("projects does hold a reference and should still be reported")
 	}
 }
+
+// Renaming "a" to "ab" makes the old directory a prefix of every profile whose
+// name starts with "a". A plain ReplaceAll turned a reference to ~/.claude-abc
+// into ~/.claude-abbc, corrupting the path of a profile that was not being
+// renamed at all.
+func TestApplyDoesNotRewriteLongerSiblingNames(t *testing.T) {
+	home := t.TempDir()
+	oldDir := filepath.Join(home, ".claude-a")
+	newDir := filepath.Join(home, ".claude-ab")
+	sibling := filepath.Join(home, ".claude-abc")
+	siblingDesktop := filepath.Join(home, ".config", "Claude-abc")
+
+	if err := os.MkdirAll(oldDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"mcp":"` + sibling + `/bin/server",` +
+		`"electron":"` + siblingDesktop + `/x",` +
+		`"self":"` + oldDir + `/settings.json",` +
+		`"bare":"` + oldDir + `"}`
+	if err := os.WriteFile(filepath.Join(oldDir, ".claude.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	b := Builder{
+		OldDir: oldDir, NewDir: newDir,
+		OldDesktop: filepath.Join(home, ".config", "Claude-a"),
+		NewDesktop: filepath.Join(home, ".config", "Claude-ab"),
+		OldVSCode:  filepath.Join(home, ".vscode-a"),
+		NewVSCode:  filepath.Join(home, ".vscode-ab"),
+	}
+	plan, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two real references: the "self" path and the "bare" one at a quote.
+	var hits int
+	for _, e := range plan.Edits {
+		if filepath.Base(e.Path) == ".claude.json" {
+			hits = e.Hits
+		}
+	}
+	if hits != 2 {
+		t.Errorf("planned %d hit(s) in .claude.json, want 2 (the sibling must not count)", hits)
+	}
+	if err := plan.Apply(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(newDir, ".claude.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"mcp":"` + sibling + `/bin/server",` +
+		`"electron":"` + siblingDesktop + `/x",` +
+		`"self":"` + newDir + `/settings.json",` +
+		`"bare":"` + newDir + `"}`
+	if string(got) != want {
+		t.Errorf("rewrite mangled a sibling profile's path:\n got  %s\n want %s", got, want)
+	}
+}
+
+func TestReplaceAtBoundary(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        string
+		old, new  string
+		want      string
+		wantCount int
+	}{
+		{"whole path followed by a separator",
+			"x /h/.claude-a/f y", "/h/.claude-a", "/h/.claude-g4", "x /h/.claude-g4/f y", 1},
+		{"whole path at end of input",
+			"cd /h/.claude-a", "/h/.claude-a", "/h/.claude-g4", "cd /h/.claude-g4", 1},
+		{"quoted",
+			`"/h/.claude-a"`, "/h/.claude-a", "/h/.claude-g4", `"/h/.claude-g4"`, 1},
+		{"longer name is left alone",
+			"/h/.claude-abc/f", "/h/.claude-a", "/h/.claude-g4", "/h/.claude-abc/f", 0},
+		{"a suffixed variant is left alone",
+			"/h/.claude-a.bak", "/h/.claude-a", "/h/.claude-g4", "/h/.claude-a.bak", 0},
+		{"glued to a longer path on the left",
+			"/other/h/.claude-a/f", "/h/.claude-a", "/h/.claude-g4", "/other/h/.claude-a/f", 0},
+		{"several occurrences, mixed",
+			"/h/.claude-a /h/.claude-ab /h/.claude-a/x", "/h/.claude-a", "/h/.claude-z",
+			"/h/.claude-z /h/.claude-ab /h/.claude-z/x", 2},
+		{"no occurrence",
+			"nothing here", "/h/.claude-a", "/h/.claude-g4", "nothing here", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, n := replaceAtBoundary([]byte(c.in), []byte(c.old), []byte(c.new))
+			if string(got) != c.want {
+				t.Errorf("got  %q\nwant %q", got, c.want)
+			}
+			if n != c.wantCount {
+				t.Errorf("count = %d, want %d", n, c.wantCount)
+			}
+		})
+	}
+}
