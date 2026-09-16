@@ -1,0 +1,23 @@
+{
+	// Deploy from this directory, against the Cloudflare account that owns the
+	// aymenkrifa.com zone (see web/README.md -- it is not the same account
+	// wrangler is logged into by default on this machine):
+	//
+	//   npx wrangler@4 deploy
+	//
+	"name": "claudeprofile-install",
+	"main": "src/index.js",
+	"compatibility_date": "2026-09-16",
+
+	// No *.workers.dev address: the only way in is the custom domain, so there
+	// is one URL to document and one to trust.
+	"workers_dev": false,
+
+	// custom_domain, not a route: Cloudflare provisions the DNS record and the
+	// certificate for the hostname itself. A plain route would need a proxied
+	// DNS record to already exist, and the wrangler OAuth scopes do not include
+	// writing DNS.
+	"routes": [{ "pattern": "claudeprofile.aymenkrifa.com", "custom_domain": true }],
+
+	"observability": { "enabled": true }
+}
