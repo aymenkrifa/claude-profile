@@ -17,9 +17,10 @@ test:
 
 vet:
 	go vet ./...
-	@for s in $(SHELLS); do \
+	@set -e; for s in $(SHELLS); do \
 	  if command -v $$s >/dev/null 2>&1; then \
-	    $$s -n shell/claude-profile.$$s && echo "shell/claude-profile.$$s ok"; \
+	    $$s -n shell/claude-profile.$$s; \
+	    echo "shell/claude-profile.$$s ok"; \
 	  else \
 	    echo "shell/claude-profile.$$s not checked ($$s not installed)"; \
 	  fi; \

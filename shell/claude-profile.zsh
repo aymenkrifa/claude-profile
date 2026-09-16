@@ -124,8 +124,11 @@ elif (( __claude_filtered )); then
   fi
   __CLAUDE_MODE="${__claude_class_default[$__CLAUDE_CLASS]:-$__CLAUDE_CLASS}"
   # A renamed-away default must not leave the shell pointing at nothing: fall
-  # back to any account of this class.
+  # back to any account of this class. Cleared before the search, so that a
+  # class with no accounts at all ends up exporting nothing rather than a
+  # CLAUDE_CONFIG_DIR naming a directory that does not exist.
   if [[ -z ${__CLAUDE_PROFILE_CLASS[$__CLAUDE_MODE]} ]]; then
+    __CLAUDE_MODE=""
     () {
       local n
       for n in ${(ok)__CLAUDE_PROFILE_CLASS}; do

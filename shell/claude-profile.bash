@@ -51,25 +51,30 @@ __claude_pair() {
 	return 1
 }
 
-# __claude_first_value() <pairs> -- print the first value, sorted, or nothing.
+# __claude_first_value() <pairs> -- print the alphabetically first value, or
+# nothing. Written without a case inside $( ), because bash 3.2 counts the ")"
+# that closes a case pattern as closing the command substitution and rejects
+# the whole file; and without sort, because that would put a process on the
+# shell-start path for a one-line comparison.
 __claude_first_value() {
-	local pair
-	for pair in $(
-		for pair in $1; do
-			case "$pair" in
-			?*:?*) printf '%s\n' "${pair#*:}" ;;
-			esac
-		done | sort -u
-	); do
-		printf '%s' "$pair"
-		return 0
+	local pair value first=""
+	for pair in $1; do
+		value=${pair#*:}
+		[ "$value" = "$pair" ] && continue
+		[ -n "$value" ] || continue
+		if [ -z "$first" ] || [ "$value" \< "$first" ]; then
+			first=$value
+		fi
 	done
-	return 1
+	[ -n "$first" ] || return 1
+	printf '%s' "$first"
 }
 
 # --- discover the accounts ----------------------------------------------
 __claude_names=()
 __claude_classes=()
+# Glob expansion is already sorted, so the commands come out in a stable order
+# without sorting anything.
 __claude_discover() {
 	local d n c key val
 	for d in "$HOME"/.claude-*/; do
@@ -139,7 +144,7 @@ elif [ "$__claude_filtered" = 1 ]; then
 	# back to any account of this class.
 	if ! __claude_class_of "$__CLAUDE_MODE" >/dev/null; then
 		__CLAUDE_MODE=""
-		for __claude_i in $(printf '%s\n' "${__claude_names[@]}" | sort); do
+		for __claude_i in "${__claude_names[@]}"; do
 			if [ "$(__claude_class_of "$__claude_i")" = "$__CLAUDE_CLASS" ]; then
 				__CLAUDE_MODE="$__claude_i"
 				break
@@ -166,7 +171,7 @@ fi
 
 # --- a claude-<name> / vs<name> pair per visible account -----------------
 __CLAUDE_PROFILE_CMDS=""
-for __claude_n in $(printf '%s\n' "${__claude_names[@]}" | sort); do
+for __claude_n in "${__claude_names[@]}"; do
 	if [ "$__claude_filtered" = 1 ]; then
 		[ "$(__claude_class_of "$__claude_n")" = "$__CLAUDE_CLASS" ] || continue
 	fi
@@ -192,7 +197,7 @@ esac
 if [ "$__claude_stub" = 1 ]; then
 	claude() {
 		local list
-		list=$(printf '%s' "$__CLAUDE_PROFILE_CMDS" | sed 's/ / | /g')
+		list=${__CLAUDE_PROFILE_CMDS// / | }
 		printf "Pick an account instead of bare 'claude': %s\n" "$list" >&2
 		if [ -n "$__CLAUDE_CLASS" ] && [ "$__claude_filtered" = 1 ]; then
 			printf "(this is a '%s' terminal -- 'claude-profile ls' shows every account)\n" "$__CLAUDE_CLASS" >&2

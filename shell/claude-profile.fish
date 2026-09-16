@@ -51,16 +51,27 @@ function __claude_pair -a pairs key
     return 1
 end
 
-# __claude_first_value <pairs> -- print the first value, or nothing.
+# __claude_first_value <pairs> -- print the alphabetically first value, or
+# nothing.
+#
+# Alphabetical, not as-written: zsh accepts the map as an associative array,
+# which has no inherent order, so this is the only rule the three integrations
+# can agree on. fish has no string comparison in test, so this is the one place
+# a process is spawned -- and only when a terminal map names no fallback class
+# and the terminal is not in the map.
 function __claude_first_value -a pairs
+    set -l values
     for p in (string split " " -- "$pairs")
         set -l kv (string split -m 1 ":" -- $p)
         if test (count $kv) -eq 2; and test -n "$kv[2]"
-            echo $kv[2]
-            return 0
+            set -a values $kv[2]
         end
     end
-    return 1
+    if test (count $values) -eq 0
+        return 1
+    end
+    set -l sorted (printf '%s\n' $values | sort)
+    echo $sorted[1]
 end
 
 # --- discover the accounts ----------------------------------------------
