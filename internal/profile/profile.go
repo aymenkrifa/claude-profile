@@ -165,6 +165,36 @@ func (p *Profile) Account() Account {
 	}
 }
 
+// Browser is the URL opener this profile hands Claude Code, read from
+// env.BROWSER in its settings. Empty means the profile overrides nothing and
+// URLs go wherever xdg-open sends them.
+//
+// Not every link obeys it: the Claude in Chrome flow picks a browser from its
+// own list, so a profile can name one browser here and still hand that flow
+// another.
+func (p *Profile) Browser() string {
+	// settings.local.json is the machine-local override and outranks
+	// settings.json, the precedence Claude Code itself applies.
+	for _, name := range []string{"settings.local.json", "settings.json"} {
+		var doc struct {
+			Env struct {
+				Browser string `json:"BROWSER"`
+			} `json:"env"`
+		}
+		data, err := os.ReadFile(filepath.Join(p.Dir, name))
+		if err != nil {
+			continue
+		}
+		if err := json.Unmarshal(data, &doc); err != nil {
+			continue
+		}
+		if b := strings.TrimSpace(doc.Env.Browser); b != "" {
+			return b
+		}
+	}
+	return ""
+}
+
 // Title is the capitalised form used in menus and window classes.
 func (p *Profile) Title() string {
 	if p.Name == "" {

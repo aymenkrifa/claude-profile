@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -36,7 +37,7 @@ func cmdLs(l paths.Layout, args []string) error {
 
 	active := os.Getenv("CLAUDE_CONFIG_DIR")
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "PROFILE\tCLASS\tACCOUNT\tNOTES")
+	fmt.Fprintln(w, "PROFILE\tCLASS\tACCOUNT\tBROWSER\tNOTES")
 	for _, p := range profiles {
 		acct := "(not signed in)"
 		if a := p.Account(); a.SignedIn {
@@ -55,7 +56,17 @@ func cmdLs(l paths.Layout, args []string) error {
 		if p.Label != "" {
 			notes = append(notes, p.Label)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, p.Class, acct, strings.Join(notes, ", "))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.Name, p.Class, acct, browserName(p.Browser()), strings.Join(notes, ", "))
 	}
 	return w.Flush()
+}
+
+// browserName reduces an env.BROWSER value to what fits a column: the command's
+// own name, without its directory or any arguments.
+func browserName(cmd string) string {
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 {
+		return "(default)"
+	}
+	return filepath.Base(fields[0])
 }

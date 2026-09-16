@@ -106,6 +106,44 @@ func TestAccount(t *testing.T) {
 	}
 }
 
+// A profile that names no browser reports none: the column then says the URL
+// goes to the system default, not that a browser is missing.
+func TestBrowser(t *testing.T) {
+	l := layout(t)
+	p := &Profile{Name: "personal", Dir: l.ConfigDir("personal"), Class: "personal"}
+	if err := p.WriteMarker(); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Browser(); got != "" {
+		t.Errorf("Browser() = %q with no settings, want empty", got)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(p.Dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("settings.json", `{"env":{"BROWSER":"/home/me/.local/bin/open-chromium"},"model":"opus"}`)
+	if got := p.Browser(); got != "/home/me/.local/bin/open-chromium" {
+		t.Errorf("Browser() = %q", got)
+	}
+	// settings.local.json is the machine-local override and wins.
+	write("settings.local.json", `{"env":{"BROWSER":"/usr/bin/firefox"}}`)
+	if got := p.Browser(); got != "/usr/bin/firefox" {
+		t.Errorf("Browser() with local override = %q, want the local value", got)
+	}
+	// An override that sets other env keys but no BROWSER falls through.
+	write("settings.local.json", `{"env":{"FOO":"bar"}}`)
+	if got := p.Browser(); got != "/home/me/.local/bin/open-chromium" {
+		t.Errorf("Browser() = %q, want the settings.json value", got)
+	}
+	// Unreadable JSON must not take the whole listing down.
+	write("settings.local.json", "{not json")
+	if got := p.Browser(); got != "/home/me/.local/bin/open-chromium" {
+		t.Errorf("Browser() over broken JSON = %q", got)
+	}
+}
+
 func TestTitle(t *testing.T) {
 	p := &Profile{Name: "acme"}
 	if p.Title() != "Acme" {
