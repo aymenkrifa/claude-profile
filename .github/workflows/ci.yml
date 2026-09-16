@@ -21,10 +21,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go vet ./...
       - run: go test -race ./...
-      - name: zsh integration parses
-        run: zsh -n shell/claude-profile.zsh
+      # The runners between them cover every shell: ubuntu gets zsh and fish
+      # from apt, and macOS brings the bash 3.2 the bash integration is
+      # actually written against. make vet skips any shell that is missing and
+      # says so, rather than failing the way a bare 'zsh -n' did on ubuntu.
+      - name: install the shells to check against
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh fish
+      - name: vet, and parse the shell integrations
+        run: make vet
       - name: cross-compile the release targets
         run: |
           for p in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
