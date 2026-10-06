@@ -109,7 +109,7 @@ It ships with claude-profile as claude-profile.%s and belongs at
   %s
 
 Install it with 'make install' from a clone, or with the install script:
-  curl -fsSL https://raw.githubusercontent.com/aymenkrifa/claude-profile/main/install.sh | sh`,
+  curl -fsSL https://claudeprofile.aymenkrifa.com/install.sh | sh`,
 			spec.name, spec.name, l.ShellInitDefault(spec.name))
 	}
 

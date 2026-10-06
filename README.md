@@ -28,10 +28,14 @@ still hand that flow another.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/aymenkrifa/claude-profile/main/install.sh | sh
+curl -fsSL https://claudeprofile.aymenkrifa.com/install.sh | sh
 ```
 
 Then reload your shell (`exec zsh`, or open a new terminal), and that's it.
+
+That URL serves this repository's `install.sh` from `main`, unchanged (see
+`web/`); the same script is at
+`https://raw.githubusercontent.com/aymenkrifa/claude-profile/main/install.sh`.
 
 Installs the binary and the shell integrations under `~/.local`, never with
 `sudo`, after verifying the archive against the release's `checksums.txt`. It

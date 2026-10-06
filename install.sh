@@ -1,7 +1,7 @@
 #!/bin/sh
 # claude-profile installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/aymenkrifa/claude-profile/main/install.sh | sh
+#   curl -fsSL https://claudeprofile.aymenkrifa.com/install.sh | sh
 #   curl -fsSL .../install.sh | sh -s -- --prefix /usr/local --version v1.0.0
 #
 # Downloads the release archive for this platform, verifies it against the
