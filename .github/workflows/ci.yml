@@ -36,3 +36,9 @@ jobs:
           for p in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
             GOOS=${p%/*} GOARCH=${p#*/} go build ./... || exit 1
           done
+      # The installer and a profile's whole life, as a user would meet them:
+      # install from the release archives with install.sh, then add, rename
+      # and rm a profile in fresh zsh and bash shells. On macOS that bash is
+      # the system 3.2, started as a login shell the way Terminal starts it.
+      - name: end to end
+        run: make e2e

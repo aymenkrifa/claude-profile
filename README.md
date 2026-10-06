@@ -264,6 +264,7 @@ internal/inuse/         which processes hold a profile open (/proc, lsof)
 internal/fsx/           atomic writes, moves
 shell/                  the zsh, bash and fish integrations
 install.sh              downloads a release, verifies it, installs it
+test/e2e.sh             install, then add / rename / rm a profile in real shells (make e2e)
 ```
 
 ```sh

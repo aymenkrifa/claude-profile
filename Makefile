@@ -5,7 +5,7 @@ VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo de
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 SHELLS    := zsh bash fish
 
-.PHONY: all build test vet fmt install uninstall dist clean
+.PHONY: all build test vet fmt install uninstall dist e2e clean
 
 all: fmt vet test build
 
@@ -25,6 +25,12 @@ vet:
 	    echo "shell/claude-profile.$$s not checked ($$s not installed)"; \
 	  fi; \
 	done
+
+# install.sh against freshly built archives, then a profile's life in real
+# shells, all under a throwaway $HOME. See test/e2e.sh.
+e2e:
+	$(MAKE) dist VERSION=v0.0.0-e2e
+	sh test/e2e.sh dist v0.0.0-e2e
 
 fmt:
 	gofmt -l -w .
