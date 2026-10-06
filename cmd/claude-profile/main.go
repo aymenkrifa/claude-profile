@@ -32,7 +32,8 @@ const usageHead = `claude-profile -- manage the Claude Code accounts on this mac
   desktop <name> [args...]    launch that account's Claude Desktop instance
   path <name>                 print its config directory
   doctor [name] [--deep]      report stale references to a profile path
-  shell-init [zsh]            print the line to add to ~/.zshrc
+  shell-init [shell]          print the line to add to the shell's startup file
+  update [--check]            install the latest release over this one
 
 Run 'claude-profile <command> -h' for that command's flags.
 
@@ -72,6 +73,8 @@ func main() {
 		err = cmdDoctor(l, args)
 	case "shell-init", "init":
 		err = cmdShellInit(l, args)
+	case "update", "upgrade":
+		err = cmdUpdate(args)
 	case "-h", "--help", "help":
 		fmt.Print(usageHead, l.Summary())
 	case "-v", "--version", "version":
@@ -84,7 +87,8 @@ func main() {
 	}
 }
 
-var version = "1.0.0"
+// Stamped by the Makefile with the git tag; a bare go build is "dev".
+var version = "dev"
 
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, "claude-profile:", err)

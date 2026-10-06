@@ -29,8 +29,8 @@ vet:
 # install.sh against freshly built archives, then a profile's life in real
 # shells, all under a throwaway $HOME. See test/e2e.sh.
 e2e:
-	$(MAKE) dist VERSION=v0.0.0-e2e
-	sh test/e2e.sh dist v0.0.0-e2e
+	$(MAKE) dist VERSION=v0.0.0
+	sh test/e2e.sh dist v0.0.0
 
 fmt:
 	gofmt -l -w .

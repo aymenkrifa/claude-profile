@@ -48,6 +48,12 @@ already sources the integration by hand is left alone. `--prefix DIR`,
 `--version vX.Y.Z`, `--no-shell` and `--no-modify-rc` all work: pass them after
 `sh -s --`.
 
+To update later, `claude-profile update` (or `--check` to only look). It reruns
+the installer against the prefix the binary lives in, refreshes the
+startup-file block if the installer wrote one, and never adds one that isn't
+there. A build from source says so and points at `git pull && make install`
+instead.
+
 From a clone instead:
 
 ```sh
@@ -145,6 +151,7 @@ accounts and asks.
 | `path <name>` | print its config directory |
 | `doctor [name] [--deep]` | report path references that point at nothing |
 | `shell-init [zsh\|bash\|fish]` | print the line to add to that shell's startup file |
+| `update [--check] [--version vX.Y.Z] [--force]` | install the latest release over this one, through the same installer |
 
 Flags may be typed before or after the positional arguments.
 

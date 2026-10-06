@@ -26,6 +26,7 @@ prefix="${PREFIX:-$HOME/.local}"
 version=""
 want_shell=1
 modify_rc=1
+update=0
 
 say()  { printf '%s\n' "$*"; }
 warn() { printf 'install.sh: warning: %s\n' "$*" >&2; }
@@ -41,6 +42,8 @@ usage: install.sh [--prefix DIR] [--version vX.Y.Z] [--no-shell] [--no-modify-rc
   --no-shell       skip the shell integrations, install only the binary
   --no-modify-rc   install the integrations but leave your shell's startup
                    file alone ('claude-profile shell-init' prints the line)
+  --update         what 'claude-profile update' runs: refresh an existing
+                   startup-file block, but never add one
   -h, --help       this message
 USAGE
 }
@@ -53,6 +56,7 @@ while [ $# -gt 0 ]; do
 	--version=*) version="${1#--version=}"; shift ;;
 	--no-shell) want_shell=0; shift ;;
 	--no-modify-rc) modify_rc=0; shift ;;
+	--update) update=1; shift ;;
 	-h | --help) usage; exit 0 ;;
 	*) die "unknown option $1 (try --help)" ;;
 	esac
@@ -223,6 +227,10 @@ if [ "$want_shell" = 1 ] && [ "$modify_rc" = 1 ] && [ -n "$rc" ]; then
 
 	if grep -q "claude-profile\.$login_shell" "$rest"; then
 		hooked="by hand"
+	elif [ "$update" = 1 ] && [ "$had_block" = 0 ]; then
+		# Installed with --no-modify-rc, or set up some other way: an update
+		# is not the moment to start editing the startup file.
+		:
 	else
 		{
 			cat "$rest"
@@ -246,6 +254,16 @@ fi
 
 # --- what now ------------------------------------------------------------
 if [ -t 1 ]; then bold=$(printf '\033[1m'); off=$(printf '\033[0m'); else bold=""; off=""; fi
+
+# The running shells still have the old integration loaded.
+if [ "$update" = 1 ]; then
+	[ "$hooked" = updated ] && say "updated claude-profile in $(tilde "$rc")"
+	say ""
+	say "${bold}Reload your shell to finish the update:${off}"
+	say ""
+	if [ -n "$rc" ]; then say "    ${bold}exec $login_shell${off}"; else say "    ${bold}open a new terminal${off}"; fi
+	exit 0
+fi
 
 if [ -n "$hooked" ]; then
 	case "$hooked" in

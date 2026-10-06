@@ -3,8 +3,8 @@
 # drive a profile through its life in fresh login shells, the way someone at a
 # terminal would. Everything happens under a throwaway $HOME.
 #
-#   make dist VERSION=v0.0.0-e2e
-#   sh test/e2e.sh dist v0.0.0-e2e
+#   make dist VERSION=v0.0.0
+#   sh test/e2e.sh dist v0.0.0
 #
 # CI runs it on macOS and Linux. What it cannot reach: signing an account in,
 # launching Claude Desktop, opening VS Code -- those need a person.
@@ -122,6 +122,28 @@ for sh in zsh bash; do
 	check "the Desktop launcher is gone" test ! -e "$H/.local/bin/claude-desktop-e2f"
 	if has_fn "$sh" claude-e2f; then bad "claude-e2f survived rm"; else ok "a new shell no longer has claude-e2f"; fi
 done
+
+if command -v zsh >/dev/null 2>&1; then
+	rc=$(rc_for zsh)
+	update() {
+		clean_env SHELL="$(command -v zsh)" CLAUDE_PROFILE_BASE_URL="file://$work/rel" \
+			CLAUDE_PROFILE_INSTALLER="$repo/install.sh" "$H/.local/bin/claude-profile" update "$@"
+	}
+
+	step "update"
+	check "an install on the target release is up to date" \
+		sh -c "$(command -v env) -i HOME='$H' '$H/.local/bin/claude-profile' update --version $version | grep -q 'up to date'"
+	out=$(update --version "$version" --force 2>&1) || true
+	printf '%s\n' "$out"
+	check "--force reinstalls through the installer" sh -c "printf '%s' \"\$1\" | grep -q 'Reload your shell'" _ "$out"
+	check "the binary still runs afterwards" "$H/.local/bin/claude-profile" --version
+	check "the startup file still has one block" test "$(blocks "$rc")" = 1
+
+	# Someone who installed with --no-modify-rc: an update must not add one.
+	awk '/^# >>> claude-profile >>>$/{s=1} !s; /^# <<< claude-profile <<<$/{s=0}' "$rc" >"$work/rc" && cat "$work/rc" >"$rc"
+	update --version "$version" --force >/dev/null 2>&1 || true
+	check "an update never adds a block that was not there" test "$(blocks "$rc")" = 0
+fi
 
 printf '\n'
 if [ "$failures" -gt 0 ]; then
