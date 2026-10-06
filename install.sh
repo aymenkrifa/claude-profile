@@ -6,9 +6,11 @@
 #
 # Downloads the release archive for this platform, verifies it against the
 # release's checksums, and installs the binary plus the shell integrations under
-# --prefix (default ~/.local). Nothing is installed outside that prefix and
-# nothing is run with sudo; if the prefix is not writable the install fails and
-# says so rather than escalating.
+# --prefix (default ~/.local), then hooks the integration into the startup file
+# of the shell $SHELL names. That one marked block is the only thing written
+# outside the prefix (--no-modify-rc skips it), and nothing is run with sudo; if
+# the prefix is not writable the install fails and says so rather than
+# escalating.
 #
 # Written for POSIX sh, not bash: macOS still ships bash 3.2 and /bin/sh there
 # is not what a `curl | sh` reader would expect it to be.
@@ -23,6 +25,7 @@ API_URL="${CLAUDE_PROFILE_API_URL:-https://api.github.com/repos/$REPO/releases/l
 prefix="${PREFIX:-$HOME/.local}"
 version=""
 want_shell=1
+modify_rc=1
 
 say()  { printf '%s\n' "$*"; }
 warn() { printf 'install.sh: warning: %s\n' "$*" >&2; }
@@ -31,11 +34,13 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 usage() {
 	cat <<'USAGE'
-usage: install.sh [--prefix DIR] [--version vX.Y.Z] [--no-shell]
+usage: install.sh [--prefix DIR] [--version vX.Y.Z] [--no-shell] [--no-modify-rc]
 
   --prefix DIR     install under DIR (default: ~/.local)
   --version TAG    install a specific release (default: the latest)
   --no-shell       skip the shell integrations, install only the binary
+  --no-modify-rc   install the integrations but leave your shell's startup
+                   file alone ('claude-profile shell-init' prints the line)
   -h, --help       this message
 USAGE
 }
@@ -47,6 +52,7 @@ while [ $# -gt 0 ]; do
 	--version) [ $# -ge 2 ] || die "--version needs a tag"; version="$2"; shift 2 ;;
 	--version=*) version="${1#--version=}"; shift ;;
 	--no-shell) want_shell=0; shift ;;
+	--no-modify-rc) modify_rc=0; shift ;;
 	-h | --help) usage; exit 0 ;;
 	*) die "unknown option $1 (try --help)" ;;
 	esac
@@ -154,15 +160,122 @@ if [ "$want_shell" = 1 ]; then
 	[ -n "$shells" ] && say "installed $prefix/share/claude-profile/ ($shells)"
 fi
 
+# --- hook up the shell --------------------------------------------------
+# The block between the markers belongs to the installer: a rerun replaces it,
+# so a new --prefix lands in place of the old one, and deleting it undoes the
+# hookup. A source line written by hand is left alone instead, so a shell set
+# up before the installer did this is not given the integration twice.
+begin_mark="# >>> claude-profile >>>"
+end_mark="# <<< claude-profile <<<"
+
+# $HOME spelled as $HOME, so the startup file still reads right if it is
+# synced to a machine with a different home directory.
+home_rel() {
+	case "$1" in
+	"$HOME"/*) printf '%s' "\$HOME/${1#"$HOME"/}" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+tilde() {
+	case "$1" in
+	"$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
+login_shell=$(basename "${SHELL:-sh}")
+rc=""
+case "$login_shell" in
+zsh) rc="${ZDOTDIR:-$HOME}/.zshrc" ;;
+# macOS terminals start bash as a login shell, which reads .bash_profile and
+# never .bashrc.
+bash) if [ "$os" = darwin ]; then rc="$HOME/.bash_profile"; else rc="$HOME/.bashrc"; fi ;;
+fish) rc="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish" ;;
+esac
+
+hooked=""      # "added", "updated" or "by hand" once the startup file loads it
+if [ "$want_shell" = 1 ] && [ "$modify_rc" = 1 ] && [ -n "$rc" ]; then
+	bin_rel=$(home_rel "$prefix/bin")
+	integ_rel=$(home_rel "$prefix/share/claude-profile/claude-profile.$login_shell")
+	if [ "$login_shell" = fish ]; then
+		path_line="contains -- \"$bin_rel\" \$PATH; or set -gx PATH \"$bin_rel\" \$PATH"
+		source_line="test -f \"$integ_rel\"; and source \"$integ_rel\""
+	else
+		path_line="case \":\$PATH:\" in *\":$bin_rel:\"*) ;; *) export PATH=\"$bin_rel:\$PATH\" ;; esac"
+		source_line="[ -f \"$integ_rel\" ] && source \"$integ_rel\""
+	fi
+
+	# Everything but an earlier block, and the blank line that preceded it.
+	rest="$work/rc.rest"
+	if [ -f "$rc" ]; then
+		grep -qxF "$begin_mark" "$rc" && had_block=1 || had_block=0
+		awk -v b="$begin_mark" -v e="$end_mark" '
+			$0 == b { skip = 1; blanks = ""; next }
+			skip { if ($0 == e) skip = 0; next }
+			/^[ \t]*$/ { blanks = blanks $0 "\n"; next }
+			{ printf "%s", blanks; blanks = ""; print }
+			END { printf "%s", blanks }
+		' "$rc" >"$rest"
+	else
+		had_block=0
+		: >"$rest"
+	fi
+
+	if grep -q "claude-profile\.$login_shell" "$rest"; then
+		hooked="by hand"
+	else
+		{
+			cat "$rest"
+			[ -s "$rest" ] && [ -n "$(tail -n 1 "$rest")" ] && echo
+			echo "$begin_mark"
+			echo "# Written by the claude-profile installer; delete this block to undo."
+			echo "# Set any CLAUDE_PROFILE_* options above it ('claude-profile shell-init')."
+			echo "$path_line"
+			echo "$source_line"
+			echo "$end_mark"
+		} >"$work/rc.new"
+		# cat rather than mv: keeps the file's mode, and keeps a symlinked
+		# startup file (a dotfiles repo) a symlink.
+		if mkdir -p "$(dirname "$rc")" && cat "$work/rc.new" >"$rc"; then
+			[ "$had_block" = 1 ] && hooked="updated" || hooked="added"
+		else
+			warn "could not write $rc; add the line from 'claude-profile shell-init' yourself"
+		fi
+	fi
+fi
+
 # --- what now ------------------------------------------------------------
+if [ -t 1 ]; then bold=$(printf '\033[1m'); off=$(printf '\033[0m'); else bold=""; off=""; fi
+
+if [ -n "$hooked" ]; then
+	case "$hooked" in
+	added) say "added claude-profile to $(tilde "$rc")" ;;
+	updated) say "updated claude-profile in $(tilde "$rc")" ;;
+	"by hand") say "$(tilde "$rc") already loads claude-profile; left it as it is" ;;
+	esac
+	say ""
+	say "${bold}Reload your shell before using claude-profile:${off}"
+	say ""
+	say "    ${bold}exec $login_shell${off}"
+	say ""
+	say "or close this terminal and open a new one. Then:"
+	say ""
+	say "    claude-profile add <name>      # create your first account"
+	exit 0
+fi
+
 case ":$PATH:" in
 *":$prefix/bin:"*) ;;
 *) warn "$prefix/bin is not on your PATH -- add it, or the shell will not find claude-profile" ;;
 esac
+
+if [ "$want_shell" = 1 ] && [ "$modify_rc" = 1 ] && [ -z "$rc" ]; then
+	warn "no integration for ${SHELL:-an unset \$SHELL}; zsh, bash and fish are supported"
+fi
 
 say ""
 say "next:"
 if [ "$want_shell" = 1 ]; then
 	say "  claude-profile shell-init    # the line to add to your shell startup file"
 fi
-say "  claude-profile add personal  # create your first account"
+say "  claude-profile add <name>    # create your first account"

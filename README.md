@@ -31,10 +31,18 @@ still hand that flow another.
 curl -fsSL https://raw.githubusercontent.com/aymenkrifa/claude-profile/main/install.sh | sh
 ```
 
-Installs the binary and the shell integrations under `~/.local` — nothing
-outside that prefix, and never with `sudo`. It verifies the archive against the
-release's `checksums.txt` before unpacking. `--prefix DIR`, `--version vX.Y.Z`
-and `--no-shell` all work: pass them after `sh -s --`.
+Then reload your shell (`exec zsh`, or open a new terminal), and that's it.
+
+Installs the binary and the shell integrations under `~/.local`, never with
+`sudo`, after verifying the archive against the release's `checksums.txt`. It
+then hooks the integration into the startup file of the shell `$SHELL` names —
+`~/.zshrc`, `~/.bashrc` (`~/.bash_profile` on macOS) or fish's `config.fish` —
+as one marked block that puts `~/.local/bin` on PATH and sources the
+integration. That block is the only thing written outside `~/.local`; rerunning
+the installer replaces it, deleting it undoes it, and a startup file that
+already sources the integration by hand is left alone. `--prefix DIR`,
+`--version vX.Y.Z`, `--no-shell` and `--no-modify-rc` all work: pass them after
+`sh -s --`.
 
 From a clone instead:
 
@@ -48,7 +56,9 @@ PATH on Linux, `Claude.app` in `/Applications` or `~/Applications` on macOS.
 
 ## Shell integration
 
-The integration is what gives each account its own commands:
+The integration is what gives each account its own commands. The install
+script wires it up; after `make install`, or with `--no-modify-rc`, print the
+line to add yourself:
 
 ```sh
 claude-profile shell-init             # for whichever shell $SHELL names
