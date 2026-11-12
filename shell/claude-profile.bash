@@ -209,7 +209,7 @@ if [ "$__claude_stub" = 1 ]; then
 fi
 
 if type complete >/dev/null 2>&1; then
-	complete -W "ls add set rename repath rm run desktop path doctor shell-init ${__claude_names[*]}" claude-profile
+	complete -W "ls add set rename repath rm run desktop path doctor shell-init update login ${__claude_names[*]}" claude-profile
 fi
 
 # Only needed while sourcing. __claude_filtered and __CLAUDE_PROFILE_CMDS are

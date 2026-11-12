@@ -227,7 +227,7 @@ set -l __claude_names
 for p in $__claude_profiles
     set -a __claude_names (string split -m 1 ":" -- $p)[1]
 end
-complete -c claude-profile -f -a "ls add set rename repath rm run desktop path doctor shell-init $__claude_names"
+complete -c claude-profile -f -a "ls add set rename repath rm run desktop path doctor shell-init update login $__claude_names"
 
 # Only needed while sourcing. __claude_filtered and __CLAUDE_PROFILE_CMDS are
 # not erased: the claude stub reads both at the time it runs.

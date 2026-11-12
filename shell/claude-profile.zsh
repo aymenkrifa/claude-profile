@@ -198,7 +198,7 @@ if (( __claude_stub )); then
   }
 fi
 
-compdef '_arguments "1:command:(ls add set rename repath rm run desktop path doctor shell-init)" "*:profile:(${(k)__CLAUDE_PROFILE_CLASS})"' claude-profile 2>/dev/null
+compdef '_arguments "1:command:(ls add set rename repath rm run desktop path doctor shell-init update login)" "*:profile:(${(k)__CLAUDE_PROFILE_CLASS})"' claude-profile 2>/dev/null
 
 # Only needed while sourcing. __claude_filtered and __CLAUDE_PROFILE_CMDS are
 # not in this list: the claude stub reads both at the time it runs.
