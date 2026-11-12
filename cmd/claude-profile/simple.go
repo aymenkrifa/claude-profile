@@ -217,10 +217,17 @@ func claudeDesktopBin(l paths.Layout) (string, error) {
 
 // execCLI replaces this process with the Claude CLI bound to one profile.
 func execCLI(configDir string, args []string) error {
+	return execCLIWith(configDir, args)
+}
+
+// execCLIWith is execCLI with extra environment entries, set after the
+// inherited ones so they win.
+func execCLIWith(configDir string, args []string, extraEnv ...string) error {
 	bin, err := exec.LookPath("claude")
 	if err != nil {
 		return fmt.Errorf("claude not found on PATH")
 	}
 	env := append(os.Environ(), "CLAUDE_CONFIG_DIR="+configDir)
+	env = append(env, extraEnv...)
 	return syscall.Exec(bin, append([]string{bin}, args...), env)
 }

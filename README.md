@@ -147,6 +147,7 @@ accounts and asks.
 | `repath <name> --from <old> [--dry-run] [--force]` | finish a rename: rewrite an old name still written inside history |
 | `rm <name> [--purge] [-y]` | unregister; `--purge` deletes the data |
 | `run <name> [-- args...]` | run the CLI against one account |
+| `login <name>` | run the CLI for `/login`, with the sign-in page in a throwaway Chrome: an empty profile folder, deleted when the window closes, so your everyday Chrome stays signed in to its own account |
 | `desktop <name> [args...]` | launch that account's Claude Desktop instance |
 | `path <name>` | print its config directory |
 | `doctor [name] [--deep]` | report path references that point at nothing |

@@ -24,7 +24,7 @@ func cmdAdd(l paths.Layout, args []string) error {
 	label := fs.String("label", "", "free-text note, shown in ls and the Desktop entry")
 	from := fs.String("from", "", "copy settings from an existing profile")
 	noDesktop := fs.Bool("no-desktop", false, "skip the Claude Desktop instance")
-	login := fs.Bool("login", false, "drop straight into the CLI to run /login")
+	login := fs.Bool("login", false, "drop straight into the CLI to run /login, signing in through a throwaway Chrome")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: claude-profile add <name> [flags]")
 		fs.PrintDefaults()
@@ -83,12 +83,13 @@ func cmdAdd(l paths.Layout, args []string) error {
 		fmt.Printf("  exec %-16s # pick up the new commands\n", currentShell())
 		fmt.Printf("  claude-%s%s   # available in any '%s' terminal, then run /login\n",
 			name, padding(name), p.Class)
+		fmt.Printf("  claude-profile login %s    # or: sign in through a throwaway Chrome\n", name)
 	} else {
-		fmt.Printf("  claude-profile run %s      # then run /login\n", name)
+		fmt.Printf("  claude-profile login %s    # then run /login\n", name)
 		fmt.Printf("  # for a 'claude-%s' command in every shell: claude-profile shell-init\n", name)
 	}
 	if *login {
-		return execCLI(p.Dir, nil)
+		return cmdLogin(l, []string{name})
 	}
 	return nil
 }

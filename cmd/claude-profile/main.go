@@ -29,6 +29,8 @@ const usageHead = `claude-profile -- manage the Claude Code accounts on this mac
                               inside transcripts, logs and job scratch
   rm <name> [--purge]         unregister an account; --purge deletes its data
   run <name> [-- args...]     run the CLI against one account
+  login <name>                run the CLI for /login, with the sign-in page in
+                              a throwaway Chrome (your own Chrome stays signed in)
   desktop <name> [args...]    launch that account's Claude Desktop instance
   path <name>                 print its config directory
   doctor [name] [--deep]      report stale references to a profile path
@@ -42,6 +44,19 @@ Layout, per account <name>:
 
 func main() {
 	l := paths.New()
+	// Re-entered as the throwaway browser that 'login' hands the CLI.
+	switch marker := os.Getenv(openerEnv); {
+	case isOpenerCall(marker, os.Args[1:]):
+		if err := openThrowaway(l, os.Args[1]); err != nil {
+			fail(err)
+		}
+		return
+	case marker == openerWait:
+		if err := runThrowaway(l, os.Args[1:]); err != nil {
+			fail(err)
+		}
+		return
+	}
 	if len(os.Args) < 2 {
 		if err := cmdLs(l, nil); err != nil {
 			fail(err)
@@ -65,6 +80,8 @@ func main() {
 		err = cmdRm(l, args)
 	case "run", "exec":
 		err = cmdRun(l, args)
+	case "login", "signin":
+		err = cmdLogin(l, args)
 	case "desktop":
 		err = cmdDesktop(l, args)
 	case "path":
